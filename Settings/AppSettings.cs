@@ -34,8 +34,15 @@ public sealed class AppSettings : UserSettingsBase
         set => Set(Math.Clamp(value, MinJetmanCount, MaxJetmanCount));
     }
 
+    public bool MiniMode
+    {
+        get => Get<bool>();
+        set => Set(value);
+    }
+
     protected override void ApplyDefaults()
     {
         JetmanCount = DefaultJetmanCount;
+        MiniMode = false;
     }
 }

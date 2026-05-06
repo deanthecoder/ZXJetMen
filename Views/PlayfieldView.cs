@@ -41,7 +41,8 @@ public sealed class PlayfieldView : Control
     private const int CyanTintIndex = 2;
     private const int GreenTintIndex = 3;
     private const int YellowTintIndex = 4;
-    private const double SpriteScale = 2;
+    private const double NormalSpriteScale = 2;
+    private const double MiniSpriteScale = 1;
     private const double Gravity = 100;
     private const double FlyChancePerSecond = 0.08;
     private const double FlyDurationSeconds = 1.0;
@@ -70,6 +71,7 @@ public sealed class PlayfieldView : Control
     private bool m_treasuresInitialized;
     private bool m_jetmanSpawningStarted;
     private int m_jetmanLimit;
+    private double m_spriteScale = NormalSpriteScale;
     private double m_nextJetmanSpawnAt;
 
     // 4x3 sheet: walk row, fly row, treasure row.
@@ -85,25 +87,28 @@ public sealed class PlayfieldView : Control
     private double CellHeight => m_spriteSheet.Size.Height / SpriteSheetRows;
     private double SmokeCellWidth => m_smokeSheet.Size.Width;
     private double SmokeCellHeight => m_smokeSheet.Size.Height / SmokeCellCount;
-    private double SmokeWidth => SmokeCellWidth * SpriteScale;
-    private double SmokeHeight => SmokeCellHeight * SpriteScale;
-    private double JetmanWidth => CellWidth * SpriteScale;
-    private double JetmanHeight => CellHeight * SpriteScale;
-    private double TreasureWidth => CellWidth * SpriteScale;
-    private double TreasureHeight => CellHeight * SpriteScale;
+    private double SmokeWidth => SmokeCellWidth * m_spriteScale;
+    private double SmokeHeight => SmokeCellHeight * m_spriteScale;
+    private double JetmanWidth => CellWidth * m_spriteScale;
+    private double JetmanHeight => CellHeight * m_spriteScale;
+    private double TreasureWidth => CellWidth * m_spriteScale;
+    private double TreasureHeight => CellHeight * m_spriteScale;
     private double TreasurePickupTopInset => TreasureHeight * TreasurePickupTopInsetRatio;
     private double TreasurePickupHeight => TreasureHeight - TreasurePickupTopInset;
     private double WalkSpeed => JetmanWidth * SimulationFramesPerSecond / WalkFrameCount;
 
     public bool ShowSyntheticPlatforms { get; set; }
 
-    public PlayfieldView(int jetmanLimit)
+    public PlayfieldView(int jetmanLimit, bool miniMode)
     {
         m_treasureSprites = CreateTreasureSprites();
+        m_spriteScale = miniMode ? MiniSpriteScale : NormalSpriteScale;
         SetJetmanLimit(jetmanLimit);
     }
 
     public int JetmanLimit => m_jetmanLimit;
+
+    public bool MiniMode => m_spriteScale == MiniSpriteScale;
 
     public void Reset()
     {
@@ -151,6 +156,49 @@ public sealed class PlayfieldView : Control
         m_jetmanLimit = Math.Max(1, jetmanLimit);
         TrimExcessJetmenAndTreasures();
         InvalidateVisual();
+    }
+
+    public void SetMiniMode(bool miniMode)
+    {
+        var newScale = miniMode ? MiniSpriteScale : NormalSpriteScale;
+        if (Math.Abs(m_spriteScale - newScale) < double.Epsilon)
+        {
+            return;
+        }
+
+        var oldJetmanWidth = JetmanWidth;
+        var oldJetmanHeight = JetmanHeight;
+        var oldTreasureWidth = TreasureWidth;
+        var oldTreasureHeight = TreasureHeight;
+        m_spriteScale = newScale;
+
+        foreach (var jetman in m_jetmen)
+        {
+            PreserveBottomCenter(jetman, oldJetmanWidth, oldJetmanHeight, JetmanWidth, JetmanHeight);
+        }
+
+        foreach (var treasure in m_treasures)
+        {
+            PreserveBottomCenter(treasure, oldTreasureWidth, oldTreasureHeight, TreasureWidth, TreasureHeight);
+        }
+
+        InvalidateVisual();
+    }
+
+    private static void PreserveBottomCenter(Jetman jetman, double oldWidth, double oldHeight, double newWidth, double newHeight)
+    {
+        var centerX = jetman.X + oldWidth / 2;
+        var bottom = jetman.Y + oldHeight;
+        jetman.X = centerX - newWidth / 2;
+        jetman.Y = bottom - newHeight;
+    }
+
+    private static void PreserveBottomCenter(Treasure treasure, double oldWidth, double oldHeight, double newWidth, double newHeight)
+    {
+        var centerX = treasure.X + oldWidth / 2;
+        var bottom = treasure.Y + oldHeight;
+        treasure.X = centerX - newWidth / 2;
+        treasure.Y = bottom - newHeight;
     }
 
     public override void Render(DrawingContext context)

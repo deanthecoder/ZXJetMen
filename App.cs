@@ -29,12 +29,13 @@ public sealed class App : Application
     private NativeMenuItem m_addJetmanItem;
     private NativeMenuItem m_removeJetmanItem;
     private NativeMenuItem m_jetmanCountItem;
+    private NativeMenuItem m_miniModeItem;
 
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var overlayWindow = new OverlayWindow(m_settings.JetmanCount);
+            var overlayWindow = new OverlayWindow(m_settings.JetmanCount, m_settings.MiniMode);
             desktop.MainWindow = overlayWindow;
             m_trayIcon = CreateTrayIcon(desktop, overlayWindow);
             desktop.Exit += (_, _) =>
@@ -67,6 +68,13 @@ public sealed class App : Application
         };
         m_removeJetmanItem.Click += (_, _) => SetJetmanCount(overlayWindow, m_settings.JetmanCount - 1);
 
+        m_miniModeItem = new NativeMenuItem
+        {
+            Header = "Mini mode",
+            ToggleType = NativeMenuItemToggleType.CheckBox
+        };
+        m_miniModeItem.Click += (_, _) => SetMiniMode(overlayWindow, !m_settings.MiniMode);
+
         var exitItem = new NativeMenuItem
         {
             Header = "Exit ZXJetMen"
@@ -77,6 +85,8 @@ public sealed class App : Application
         menu.Items.Add(m_jetmanCountItem);
         menu.Items.Add(m_addJetmanItem);
         menu.Items.Add(m_removeJetmanItem);
+        menu.Items.Add(new NativeMenuItemSeparator());
+        menu.Items.Add(m_miniModeItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(exitItem);
 
@@ -105,10 +115,19 @@ public sealed class App : Application
         UpdateJetmanMenu();
     }
 
+    private void SetMiniMode(OverlayWindow overlayWindow, bool miniMode)
+    {
+        m_settings.MiniMode = miniMode;
+        m_settings.Save();
+        overlayWindow.SetMiniMode(m_settings.MiniMode);
+        UpdateJetmanMenu();
+    }
+
     private void UpdateJetmanMenu()
     {
         m_jetmanCountItem.Header = $"Jetmen: {m_settings.JetmanCount}";
         m_addJetmanItem.IsEnabled = m_settings.JetmanCount < AppSettings.MaxJetmanCount;
         m_removeJetmanItem.IsEnabled = m_settings.JetmanCount > AppSettings.MinJetmanCount;
+        m_miniModeItem.IsChecked = m_settings.MiniMode;
     }
 }

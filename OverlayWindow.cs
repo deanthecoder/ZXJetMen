@@ -38,9 +38,9 @@ public sealed class OverlayWindow : Window
     private Timer m_timer;
     private int m_tickQueued;
 
-    public OverlayWindow(int jetmanCount)
+    public OverlayWindow(int jetmanCount, bool miniMode)
     {
-        m_view = new PlayfieldView(jetmanCount);
+        m_view = new PlayfieldView(jetmanCount, miniMode);
 
         // Transparent, borderless overlay that sits above the primary desktop.
         Content = m_view;
@@ -120,5 +120,10 @@ public sealed class OverlayWindow : Window
     public void SetJetmanCount(int jetmanCount)
     {
         m_view.SetJetmanLimit(jetmanCount);
+    }
+
+    public void SetMiniMode(bool miniMode)
+    {
+        m_view.SetMiniMode(miniMode);
     }
 }
