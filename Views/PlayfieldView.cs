@@ -26,12 +26,10 @@ namespace ZXJetMen.Views;
 /// </remarks>
 public sealed class PlayfieldView : Control
 {
-    private const int JetmanCount = 3;
     private const int SpriteSheetColumns = 4;
     private const int SpriteSheetRows = 3;
     private const int WalkFrameCount = 4;
     private const int FlyFrameCount = 4;
-    private const int TreasureCount = JetmanCount;
     private const int TreasureFrameCount = 4;
     private const int WalkRow = 0;
     private const int FlyRow = 1;
@@ -69,6 +67,7 @@ public sealed class PlayfieldView : Control
     private readonly List<Treasure> m_treasures = new();
     private bool m_treasuresInitialized;
     private bool m_jetmanSpawningStarted;
+    private int m_jetmanLimit;
     private double m_nextJetmanSpawnAt;
 
     // 4x3 sheet: walk row, fly row, treasure row.
@@ -89,10 +88,13 @@ public sealed class PlayfieldView : Control
 
     public bool ShowSyntheticPlatforms { get; set; }
 
-    public PlayfieldView()
+    public PlayfieldView(int jetmanLimit)
     {
         m_treasureSprites = CreateTreasureSprites();
+        SetJetmanLimit(jetmanLimit);
     }
+
+    public int JetmanLimit => m_jetmanLimit;
 
     public void Reset()
     {
@@ -112,6 +114,10 @@ public sealed class PlayfieldView : Control
         {
             InitializeTreasures(now);
         }
+        else
+        {
+            ReconcileTreasureCount(now);
+        }
 
         foreach (var treasure in m_treasures)
         {
@@ -123,11 +129,18 @@ public sealed class PlayfieldView : Control
             SpawnNextJetman(now);
         }
 
-        foreach (var jetman in m_jetmen)
+        foreach (var jetman in m_jetmen.ToArray())
         {
             StepJetman(jetman, dt, now, platforms);
         }
 
+        InvalidateVisual();
+    }
+
+    public void SetJetmanLimit(int jetmanLimit)
+    {
+        m_jetmanLimit = Math.Max(1, jetmanLimit);
+        TrimExcessJetmenAndTreasures();
         InvalidateVisual();
     }
 
@@ -277,11 +290,22 @@ public sealed class PlayfieldView : Control
     {
         var previousBottom = jetman.Y + JetmanHeight;
         jetman.DirectionCooldown = Math.Max(0, jetman.DirectionCooldown - dt);
-        var currentSupport = FindSupport(jetman, jetman.X, platforms);
-        UpdateTreasure(jetman);
-        SteerToTreasure(jetman, currentSupport);
+        var currentSupport = jetman.Retiring ? null : FindSupport(jetman, jetman.X, platforms);
+        if (jetman.Retiring)
+        {
+            jetman.Treasure = null;
+            jetman.Grounded = false;
+            jetman.FlyTimeRemaining = 0;
+        }
+        else
+        {
+            UpdateTreasure(jetman);
+            SteerToTreasure(jetman, currentSupport);
+        }
 
-        if (jetman.FlyTimeRemaining <= 0 && m_random.NextDouble() < FlyChancePerSecond * dt)
+        if (!jetman.Retiring &&
+            jetman.FlyTimeRemaining <= 0 &&
+            m_random.NextDouble() < FlyChancePerSecond * dt)
         {
             StartFlying(jetman, FlyDurationSeconds);
             jetman.Grounded = false;
@@ -296,12 +320,12 @@ public sealed class PlayfieldView : Control
 
             jetman.WalkDistance += Math.Abs(jetman.X - previousX);
 
-            if (jetman.Grounded && jetman.Treasure is null && m_random.NextDouble() < 0.003)
+            if (!jetman.Retiring && jetman.Grounded && jetman.Treasure is null && m_random.NextDouble() < 0.003)
             {
                 TrySetIntent(jetman, -jetman.IntentDirection);
             }
 
-            if (jetman.Grounded && FindSupport(jetman, jetman.X, platforms) is null)
+            if (!jetman.Retiring && jetman.Grounded && FindSupport(jetman, jetman.X, platforms) is null)
             {
                 // At a platform edge, give a short thrust burst instead of just dropping.
                 jetman.Grounded = false;
@@ -323,7 +347,9 @@ public sealed class PlayfieldView : Control
             jetman.Vy += Gravity * dt;
             jetman.Y += jetman.Vy * dt;
 
-            var landed = FindLandingPlatform(jetman, platforms, previousBottom, jetman.Y + JetmanHeight);
+            var landed = jetman.Retiring
+                ? null
+                : FindLandingPlatform(jetman, platforms, previousBottom, jetman.Y + JetmanHeight);
             if (jetman.Vy >= 0 && landed is not null)
             {
                 jetman.Y = landed.Value.Y - JetmanHeight;
@@ -367,6 +393,12 @@ public sealed class PlayfieldView : Control
 
         if (jetman.Y > Bounds.Height)
         {
+            if (jetman.Retiring)
+            {
+                m_jetmen.Remove(jetman);
+                return;
+            }
+
             // Recycle jetmen that fall past the bottom of the primary monitor.
             if (!TryPickTopSpawnX(JetmanWidth, m_lastKnownPlatforms, out var respawnX))
             {
@@ -392,11 +424,14 @@ public sealed class PlayfieldView : Control
             jetman.Vy = Math.Max(0, jetman.Vy);
         }
 
-        var collectedTreasure = FindCollectedTreasure(jetman);
-        if (collectedTreasure is not null)
+        if (!jetman.Retiring)
         {
-            CollectTreasure(collectedTreasure, now);
-            ChooseTreasure(jetman);
+            var collectedTreasure = FindCollectedTreasure(jetman);
+            if (collectedTreasure is not null)
+            {
+                CollectTreasure(collectedTreasure, now);
+                ChooseTreasure(jetman);
+            }
         }
     }
 
@@ -405,8 +440,16 @@ public sealed class PlayfieldView : Control
     private void InitializeTreasures(double now)
     {
         m_treasures.Clear();
-        var spawnAt = now;
-        for (var i = 0; i < TreasureCount; i++)
+        ReconcileTreasureCount(now);
+        m_treasuresInitialized = true;
+    }
+
+    private void ReconcileTreasureCount(double now)
+    {
+        TrimExcessJetmenAndTreasures();
+
+        var spawnAt = Math.Max(now, m_treasures.Count == 0 ? now : m_treasures.Max(t => t.SpawnAt));
+        while (m_treasures.Count < m_jetmanLimit)
         {
             spawnAt += RandomSpawnDelay();
             m_treasures.Add(new Treasure
@@ -415,8 +458,23 @@ public sealed class PlayfieldView : Control
                 SpawnAt = spawnAt
             });
         }
+    }
 
-        m_treasuresInitialized = true;
+    private void TrimExcessJetmenAndTreasures()
+    {
+        var activeJetmen = m_jetmen.Count(j => !j.Retiring);
+        while (activeJetmen > m_jetmanLimit)
+        {
+            RetireJetman(m_jetmen.Last(j => !j.Retiring));
+            activeJetmen--;
+        }
+
+        while (m_treasures.Count > m_jetmanLimit)
+        {
+            var treasure = m_treasures.LastOrDefault(t => !t.Active) ?? m_treasures[^1];
+            ClearTreasureAssignments(treasure);
+            m_treasures.Remove(treasure);
+        }
     }
 
     private void SpawnNextJetman(double now)
@@ -427,7 +485,7 @@ public sealed class PlayfieldView : Control
             m_nextJetmanSpawnAt = now + RandomSpawnDelay();
         }
 
-        if (m_jetmen.Count >= JetmanCount || now < m_nextJetmanSpawnAt)
+        if (m_jetmen.Count(j => !j.Retiring) >= m_jetmanLimit || now < m_nextJetmanSpawnAt)
         {
             return;
         }
@@ -674,11 +732,24 @@ public sealed class PlayfieldView : Control
     private void CollectTreasure(Treasure treasure, double now)
     {
         ScheduleTreasureRespawn(treasure, now);
+        ClearTreasureAssignments(treasure);
+    }
 
+    private void ClearTreasureAssignments(Treasure treasure)
+    {
         foreach (var jetman in m_jetmen.Where(p => ReferenceEquals(p.Treasure, treasure)))
         {
             jetman.Treasure = null;
         }
+    }
+
+    private void RetireJetman(Jetman jetman)
+    {
+        jetman.Retiring = true;
+        jetman.Treasure = null;
+        jetman.Grounded = false;
+        jetman.FlyTimeRemaining = 0;
+        jetman.Vy = Math.Max(jetman.Vy, 0);
     }
 
     private bool IsAtTreasure(Jetman jetman, Treasure treasure)
@@ -926,6 +997,7 @@ public sealed class PlayfieldView : Control
         public Treasure Treasure { get; set; }
         public int IntentDirection { get; set; } = 1;
         public bool Grounded { get; set; }
+        public bool Retiring { get; set; }
     }
 
     /// <summary>

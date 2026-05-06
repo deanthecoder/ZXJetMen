@@ -31,15 +31,17 @@ public sealed class OverlayWindow : Window
 {
     private static readonly TimeSpan FrameInterval = TimeSpan.FromSeconds(1.0 / 15.0);
     private readonly IPlatformProvider m_platformProvider = PlatformProviderFactory.Create();
-    private readonly PlayfieldView m_view = new();
+    private readonly PlayfieldView m_view;
     private readonly Stopwatch m_clock = Stopwatch.StartNew();
     private readonly Stopwatch m_totalClock = Stopwatch.StartNew();
     private PixelRect m_activeScreenBounds;
     private Timer m_timer;
     private int m_tickQueued;
 
-    public OverlayWindow()
+    public OverlayWindow(int jetmanCount)
     {
+        m_view = new PlayfieldView(jetmanCount);
+
         // Transparent, borderless overlay that sits above the primary desktop.
         Content = m_view;
         Background = Brushes.Transparent;
@@ -113,5 +115,10 @@ public sealed class OverlayWindow : Window
         Height = m_activeScreenBounds.Height;
         m_view.Width = m_activeScreenBounds.Width;
         m_view.Height = m_activeScreenBounds.Height;
+    }
+
+    public void SetJetmanCount(int jetmanCount)
+    {
+        m_view.SetJetmanLimit(jetmanCount);
     }
 }

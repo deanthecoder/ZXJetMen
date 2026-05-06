@@ -12,6 +12,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using ZXJetMen.Services;
+using ZXJetMen.Settings;
 
 namespace ZXJetMen;
 
@@ -23,22 +24,49 @@ namespace ZXJetMen;
 /// </remarks>
 public sealed class App : Application
 {
+    private readonly AppSettings m_settings = AppSettings.Instance;
     private TrayIcon m_trayIcon;
+    private NativeMenuItem m_addJetmanItem;
+    private NativeMenuItem m_removeJetmanItem;
+    private NativeMenuItem m_jetmanCountItem;
 
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new OverlayWindow();
-            m_trayIcon = CreateTrayIcon(desktop);
-            desktop.Exit += (_, _) => m_trayIcon?.Dispose();
+            var overlayWindow = new OverlayWindow(m_settings.JetmanCount);
+            desktop.MainWindow = overlayWindow;
+            m_trayIcon = CreateTrayIcon(desktop, overlayWindow);
+            desktop.Exit += (_, _) =>
+            {
+                m_trayIcon?.Dispose();
+                m_settings.Save();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static TrayIcon CreateTrayIcon(IClassicDesktopStyleApplicationLifetime desktop)
+    private TrayIcon CreateTrayIcon(IClassicDesktopStyleApplicationLifetime desktop, OverlayWindow overlayWindow)
     {
+        m_jetmanCountItem = new NativeMenuItem
+        {
+            Header = string.Empty,
+            IsEnabled = false
+        };
+
+        m_addJetmanItem = new NativeMenuItem
+        {
+            Header = "Add Jetman"
+        };
+        m_addJetmanItem.Click += (_, _) => SetJetmanCount(overlayWindow, m_settings.JetmanCount + 1);
+
+        m_removeJetmanItem = new NativeMenuItem
+        {
+            Header = "Remove Jetman"
+        };
+        m_removeJetmanItem.Click += (_, _) => SetJetmanCount(overlayWindow, m_settings.JetmanCount - 1);
+
         var exitItem = new NativeMenuItem
         {
             Header = "Exit ZXJetMen"
@@ -46,6 +74,10 @@ public sealed class App : Application
         exitItem.Click += (_, _) => desktop.Shutdown();
 
         var menu = new NativeMenu();
+        menu.Items.Add(m_jetmanCountItem);
+        menu.Items.Add(m_addJetmanItem);
+        menu.Items.Add(m_removeJetmanItem);
+        menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(exitItem);
 
         var trayIcon = new TrayIcon
@@ -61,6 +93,22 @@ public sealed class App : Application
             MacOSProperties.SetIsTemplateIcon(trayIcon, false);
         }
 
+        UpdateJetmanMenu();
         return trayIcon;
+    }
+
+    private void SetJetmanCount(OverlayWindow overlayWindow, int jetmanCount)
+    {
+        m_settings.JetmanCount = jetmanCount;
+        m_settings.Save();
+        overlayWindow.SetJetmanCount(m_settings.JetmanCount);
+        UpdateJetmanMenu();
+    }
+
+    private void UpdateJetmanMenu()
+    {
+        m_jetmanCountItem.Header = $"Jetmen: {m_settings.JetmanCount}";
+        m_addJetmanItem.IsEnabled = m_settings.JetmanCount < AppSettings.MaxJetmanCount;
+        m_removeJetmanItem.IsEnabled = m_settings.JetmanCount > AppSettings.MinJetmanCount;
     }
 }
