@@ -8,28 +8,23 @@
 //
 // THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND.
 
-using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Platform;
 
-namespace ZXJetMen;
+namespace ZXJetMen.Services;
 
 /// <summary>
-/// Starts the Avalonia desktop application.
+/// Loads the shared application icon resource.
 /// </summary>
 /// <remarks>
-/// Keeping the entry point tiny leaves platform setup in one predictable place while the app shell owns the overlay.
+/// Window and tray icons use the same asset, so this helper keeps resource URI handling consistent across the app shell.
 /// </remarks>
-internal static class Program
+public static class IconLoader
 {
-    [STAThread]
-    public static void Main(string[] args)
-    {
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
+    private static readonly Uri IconUri = new("avares://ZXJetMen/Assets/app.ico");
 
-    private static AppBuilder BuildAvaloniaApp()
+    public static WindowIcon LoadWindowIcon()
     {
-        return AppBuilder.Configure<App>()
-            .UsePlatformDetect()
-            .LogToTrace();
+        return new WindowIcon(AssetLoader.Open(IconUri));
     }
 }

@@ -1,0 +1,24 @@
+{
+  "ProductName": "ZXJetMen",
+  "CompanyName": "Dean Edis (DeanTheCoder)",
+  "PublisherUrl": "https://github.com/deanthecoder",
+  "BundleIdentifier": "com.deanthecoder.zxjetmen",
+  "Executable": "ZXJetMen",
+  "Project": "ZxJetMen.csproj",
+  "Version": "0.1",
+  "Win": {
+    "InnoScript": "Installer/templates/inno.iss",
+    "IconIco": "Assets/app.ico",
+    "GUID": "{4E8C18D9-89D3-4145-B7B7-22F8A812AD1D}",
+    "RuntimeIdentifier": "win-x64",
+    "InstallOpenAL": false
+  },
+  "Mac": {
+    "RuntimeIdentifiers": [
+      "osx-arm64",
+      "osx-x64"
+    ],
+    "IconIcns": "Assets/app.icns",
+    "InfoPlist": "Installer/templates/Info.plist"
+  }
+}

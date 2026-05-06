@@ -9,27 +9,23 @@
 // THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND.
 
 using Avalonia;
+using ZXJetMen.Interop;
+using ZXJetMen.Models;
 
-namespace ZXJetMen;
+namespace ZXJetMen.Services;
 
 /// <summary>
-/// Starts the Avalonia desktop application.
+/// Reads visible Windows desktop windows as playable platforms.
 /// </summary>
 /// <remarks>
-/// Keeping the entry point tiny leaves platform setup in one predictable place while the app shell owns the overlay.
+/// This adapter keeps Win32 and DWM details out of the playfield while preserving the desktop-as-level behavior that makes ZXJetMen fun.
 /// </remarks>
-internal static class Program
+public sealed class WindowsPlatformProvider : IPlatformProvider
 {
-    [STAThread]
-    public static void Main(string[] args)
-    {
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
+    public bool ShowSyntheticPlatforms => false;
 
-    private static AppBuilder BuildAvaloniaApp()
+    public IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, IntPtr self)
     {
-        return AppBuilder.Configure<App>()
-            .UsePlatformDetect()
-            .LogToTrace();
+        return WindowsInterop.GetPlatforms(screenBounds, self);
     }
 }

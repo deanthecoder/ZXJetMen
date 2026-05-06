@@ -8,28 +8,20 @@
 //
 // THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND.
 
-using Avalonia;
-
-namespace ZXJetMen;
+namespace ZXJetMen.Services;
 
 /// <summary>
-/// Starts the Avalonia desktop application.
+/// Creates the platform provider that best matches the current operating system.
 /// </summary>
 /// <remarks>
-/// Keeping the entry point tiny leaves platform setup in one predictable place while the app shell owns the overlay.
+/// Windows can use real desktop windows as platforms, while other systems currently need generated ledges to keep the game playable.
 /// </remarks>
-internal static class Program
+public static class PlatformProviderFactory
 {
-    [STAThread]
-    public static void Main(string[] args)
+    public static IPlatformProvider Create()
     {
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
-
-    private static AppBuilder BuildAvaloniaApp()
-    {
-        return AppBuilder.Configure<App>()
-            .UsePlatformDetect()
-            .LogToTrace();
+        return OperatingSystem.IsWindows()
+            ? new WindowsPlatformProvider()
+            : new SyntheticPlatformProvider();
     }
 }

@@ -9,27 +9,19 @@
 // THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND.
 
 using Avalonia;
+using ZXJetMen.Models;
 
-namespace ZXJetMen;
+namespace ZXJetMen.Services;
 
 /// <summary>
-/// Starts the Avalonia desktop application.
+/// Supplies the platforms currently available to the playfield.
 /// </summary>
 /// <remarks>
-/// Keeping the entry point tiny leaves platform setup in one predictable place while the app shell owns the overlay.
+/// Platform discovery differs by operating system, so this interface keeps native window probing and synthetic fallback layouts behind one contract.
 /// </remarks>
-internal static class Program
+public interface IPlatformProvider
 {
-    [STAThread]
-    public static void Main(string[] args)
-    {
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
+    bool ShowSyntheticPlatforms { get; }
 
-    private static AppBuilder BuildAvaloniaApp()
-    {
-        return AppBuilder.Configure<App>()
-            .UsePlatformDetect()
-            .LogToTrace();
-    }
+    IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, IntPtr self);
 }
