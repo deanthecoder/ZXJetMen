@@ -31,6 +31,8 @@ public sealed class PlayfieldView : Control
     private const int WalkFrameCount = 4;
     private const int FlyFrameCount = 4;
     private const int TreasureFrameCount = 4;
+    private const int SmokeCellCount = 3;
+    private const int SmokeAnimationFrameCount = 5;
     private const int WalkRow = 0;
     private const int FlyRow = 1;
     private const int TreasureRow = 2;
@@ -72,12 +74,19 @@ public sealed class PlayfieldView : Control
 
     // 4x3 sheet: walk row, fly row, treasure row.
     private static readonly Uri SpriteSheetUri = new("avares://ZXJetMen/Assets/sheet.png");
+    private static readonly Uri SmokeSheetUri = new("avares://ZXJetMen/Assets/smoke.png");
     private static readonly IBrush SyntheticPlatformFill = new SolidColorBrush(Color.FromArgb(18, 0, 212, 255));
     private static readonly IPen SyntheticPlatformStroke = new Pen(new SolidColorBrush(Color.FromArgb(42, 255, 236, 68)));
+    private static readonly int[] SmokeSequence = [2, 1, 0, 1, 2];
     private readonly Bitmap m_spriteSheet = new(AssetLoader.Open(SpriteSheetUri));
+    private readonly Bitmap m_smokeSheet = new(AssetLoader.Open(SmokeSheetUri));
     private readonly Bitmap[,] m_treasureSprites;
     private double CellWidth => m_spriteSheet.Size.Width / SpriteSheetColumns;
     private double CellHeight => m_spriteSheet.Size.Height / SpriteSheetRows;
+    private double SmokeCellWidth => m_smokeSheet.Size.Width;
+    private double SmokeCellHeight => m_smokeSheet.Size.Height / SmokeCellCount;
+    private double SmokeWidth => SmokeCellWidth * SpriteScale;
+    private double SmokeHeight => SmokeCellHeight * SpriteScale;
     private double JetmanWidth => CellWidth * SpriteScale;
     private double JetmanHeight => CellHeight * SpriteScale;
     private double TreasureWidth => CellWidth * SpriteScale;
@@ -155,6 +164,7 @@ public sealed class PlayfieldView : Control
 
         foreach (var jetman in m_jetmen)
         {
+            DrawSmoke(context, jetman);
             DrawJetman(context, jetman);
         }
     }
@@ -182,6 +192,27 @@ public sealed class PlayfieldView : Control
 
         var dest = new Rect(treasure.X, treasure.Y, TreasureWidth, TreasureHeight);
         context.DrawImage(m_treasureSprites[treasure.SpriteIndex, treasure.TintIndex], dest);
+    }
+
+    private void DrawSmoke(DrawingContext context, Jetman jetman)
+    {
+        if (jetman.SmokeAnimationTime >= SmokeAnimationFrameCount / SimulationFramesPerSecond)
+        {
+            return;
+        }
+
+        var animationFrame = Math.Min(
+            SmokeAnimationFrameCount - 1,
+            (int)Math.Floor(jetman.SmokeAnimationTime * SimulationFramesPerSecond));
+        var sourceRow = SmokeSequence[animationFrame];
+        var source = new Rect(0, sourceRow * SmokeCellHeight, SmokeCellWidth, SmokeCellHeight);
+        var dest = new Rect(
+            jetman.SmokeAnchorX - SmokeWidth / 2,
+            jetman.SmokeAnchorY - SmokeHeight,
+            SmokeWidth,
+            SmokeHeight);
+
+        context.DrawImage(m_smokeSheet, source, dest);
     }
 
     private void DrawJetman(DrawingContext context, Jetman jetman)
@@ -290,6 +321,7 @@ public sealed class PlayfieldView : Control
     {
         var previousBottom = jetman.Y + JetmanHeight;
         jetman.DirectionCooldown = Math.Max(0, jetman.DirectionCooldown - dt);
+        jetman.SmokeAnimationTime += dt;
         var currentSupport = jetman.Retiring ? null : FindSupport(jetman, jetman.X, platforms);
         if (jetman.Retiring)
         {
@@ -328,9 +360,9 @@ public sealed class PlayfieldView : Control
             if (!jetman.Retiring && jetman.Grounded && FindSupport(jetman, jetman.X, platforms) is null)
             {
                 // At a platform edge, give a short thrust burst instead of just dropping.
-                jetman.Grounded = false;
                 jetman.Vy = 0;
                 StartFlying(jetman, EdgeFlyDurationSeconds);
+                jetman.Grounded = false;
             }
         }
 
@@ -905,13 +937,20 @@ public sealed class PlayfieldView : Control
         return direct;
     }
 
-    private static void StartFlying(Jetman jetman, double durationSeconds)
+    private void StartFlying(Jetman jetman, double durationSeconds)
     {
         var wasFlying = jetman.FlyTimeRemaining > 0;
+        var wasGrounded = jetman.Grounded;
         jetman.FlyTimeRemaining = Math.Max(jetman.FlyTimeRemaining, durationSeconds);
         if (!wasFlying)
         {
             jetman.FlyAnimationTime = 0;
+            if (wasGrounded)
+            {
+                jetman.SmokeAnchorX = jetman.X + JetmanWidth / 2;
+                jetman.SmokeAnchorY = jetman.Y + JetmanHeight;
+                jetman.SmokeAnimationTime = 0;
+            }
         }
     }
     
@@ -993,6 +1032,9 @@ public sealed class PlayfieldView : Control
         public double WalkDistance { get; set; }
         public double FlyTimeRemaining { get; set; }
         public double FlyAnimationTime { get; set; }
+        public double SmokeAnchorX { get; set; }
+        public double SmokeAnchorY { get; set; }
+        public double SmokeAnimationTime { get; set; } = SmokeAnimationFrameCount / SimulationFramesPerSecond;
         public double DirectionCooldown { get; set; }
         public Treasure Treasure { get; set; }
         public int IntentDirection { get; set; } = 1;
