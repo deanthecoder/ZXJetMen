@@ -50,7 +50,7 @@ public sealed class OverlayWindow : Window
         ExtendClientAreaToDecorationsHint = false;
         ExtendClientAreaChromeHints = ExtendClientAreaChromeHints.NoChrome;
         Icon = IconLoader.LoadWindowIcon();
-        ShowInTaskbar = true;
+        ShowInTaskbar = false;
         SystemDecorations = SystemDecorations.None;
         Title = "ZXJetMen";
         Topmost = true;

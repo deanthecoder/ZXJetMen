@@ -11,6 +11,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml;
+using DTC.Core.Commands;
 using ZXJetMen.Services;
 using ZXJetMen.Settings;
 
@@ -32,6 +34,8 @@ public sealed class App : Application
     private NativeMenuItem m_jetmanCountItem;
     private NativeMenuItem m_miniModeItem;
 
+    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -39,7 +43,7 @@ public sealed class App : Application
             var overlayWindow = new OverlayWindow(m_settings.JetmanCount, m_settings.MiniMode);
             desktop.MainWindow = overlayWindow;
             m_trayIcon = CreateTrayIcon(desktop, overlayWindow);
-            m_trayIcons = new TrayIcons { m_trayIcon };
+            m_trayIcons = [m_trayIcon];
             TrayIcon.SetIcons(this, m_trayIcons);
             desktop.Exit += (_, _) =>
             {
@@ -54,45 +58,42 @@ public sealed class App : Application
 
     private TrayIcon CreateTrayIcon(IClassicDesktopStyleApplicationLifetime desktop, OverlayWindow overlayWindow)
     {
-        m_jetmanCountItem = new NativeMenuItem
+        m_jetmanCountItem = new NativeMenuItem(GetJetmanCountHeader())
         {
-            Header = string.Empty,
             IsEnabled = false
         };
 
-        m_addJetmanItem = new NativeMenuItem
+        m_addJetmanItem = new NativeMenuItem("Add Jetman")
         {
-            Header = "Add Jetman"
+            Command = new RelayCommand(_ => SetJetmanCount(overlayWindow, m_settings.JetmanCount + 1))
         };
-        m_addJetmanItem.Click += (_, _) => SetJetmanCount(overlayWindow, m_settings.JetmanCount + 1);
 
-        m_removeJetmanItem = new NativeMenuItem
+        m_removeJetmanItem = new NativeMenuItem("Remove Jetman")
         {
-            Header = "Remove Jetman"
+            Command = new RelayCommand(_ => SetJetmanCount(overlayWindow, m_settings.JetmanCount - 1))
         };
-        m_removeJetmanItem.Click += (_, _) => SetJetmanCount(overlayWindow, m_settings.JetmanCount - 1);
 
-        m_miniModeItem = new NativeMenuItem
+        m_miniModeItem = new NativeMenuItem("Mini mode")
         {
-            Header = "Mini mode",
+            Command = new RelayCommand(_ => SetMiniMode(overlayWindow, !m_settings.MiniMode)),
             ToggleType = NativeMenuItemToggleType.CheckBox
         };
-        m_miniModeItem.Click += (_, _) => SetMiniMode(overlayWindow, !m_settings.MiniMode);
 
-        var exitItem = new NativeMenuItem
+        var menu = new NativeMenu
         {
-            Header = "Exit ZXJetMen"
+            m_jetmanCountItem,
+            m_addJetmanItem,
+            m_removeJetmanItem,
+            new NativeMenuItemSeparator(),
+            m_miniModeItem,
+            new NativeMenuItemSeparator(),
+            new NativeMenuItem("Exit")
+            {
+                ToolTip = "Exit",
+                Command = new RelayCommand(_ => desktop.Shutdown())
+            }
         };
-        exitItem.Click += (_, _) => desktop.Shutdown();
-
-        var menu = new NativeMenu();
-        menu.Items.Add(m_jetmanCountItem);
-        menu.Items.Add(m_addJetmanItem);
-        menu.Items.Add(m_removeJetmanItem);
-        menu.Items.Add(new NativeMenuItemSeparator());
-        menu.Items.Add(m_miniModeItem);
-        menu.Items.Add(new NativeMenuItemSeparator());
-        menu.Items.Add(exitItem);
+        menu.NeedsUpdate += (_, _) => UpdateJetmanMenu();
 
         var trayIcon = new TrayIcon
         {
@@ -129,9 +130,11 @@ public sealed class App : Application
 
     private void UpdateJetmanMenu()
     {
-        m_jetmanCountItem.Header = $"Jetmen: {m_settings.JetmanCount}";
+        m_jetmanCountItem.Header = GetJetmanCountHeader();
         m_addJetmanItem.IsEnabled = m_settings.JetmanCount < AppSettings.MaxJetmanCount;
         m_removeJetmanItem.IsEnabled = m_settings.JetmanCount > AppSettings.MinJetmanCount;
         m_miniModeItem.IsChecked = m_settings.MiniMode;
     }
+
+    private string GetJetmanCountHeader() => $"Jetmen: {m_settings.JetmanCount}";
 }
