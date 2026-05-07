@@ -23,15 +23,16 @@ public sealed class SyntheticPlatformProvider : IPlatformProvider
 {
     public bool ShowSyntheticPlatforms => true;
 
-    public IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, IntPtr self)
+    public IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, double screenScale, IntPtr self)
     {
         if (screenBounds.Width <= 0 || screenBounds.Height <= 0)
         {
             return [];
         }
 
-        var width = screenBounds.Width;
-        var height = screenBounds.Height;
+        var scale = screenScale > 0 ? screenScale : 1;
+        var width = screenBounds.Width / scale;
+        var height = screenBounds.Height / scale;
         var platformHeight = Math.Max(96, height * 0.2);
 
         return

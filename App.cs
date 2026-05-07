@@ -25,6 +25,7 @@ namespace ZXJetMen;
 public sealed class App : Application
 {
     private readonly AppSettings m_settings = AppSettings.Instance;
+    private TrayIcons m_trayIcons;
     private TrayIcon m_trayIcon;
     private NativeMenuItem m_addJetmanItem;
     private NativeMenuItem m_removeJetmanItem;
@@ -38,8 +39,11 @@ public sealed class App : Application
             var overlayWindow = new OverlayWindow(m_settings.JetmanCount, m_settings.MiniMode);
             desktop.MainWindow = overlayWindow;
             m_trayIcon = CreateTrayIcon(desktop, overlayWindow);
+            m_trayIcons = new TrayIcons { m_trayIcon };
+            TrayIcon.SetIcons(this, m_trayIcons);
             desktop.Exit += (_, _) =>
             {
+                TrayIcon.SetIcons(this, null);
                 m_trayIcon?.Dispose();
                 m_settings.Save();
             };

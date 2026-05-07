@@ -23,13 +23,14 @@ namespace ZXJetMen.Interop;
 /// </remarks>
 internal static partial class WindowsInterop
 {
-    public static IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, IntPtr self)
+    public static IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, double screenScale, IntPtr self)
     {
         if (!OperatingSystem.IsWindows() || screenBounds.Width <= 0 || screenBounds.Height <= 0)
         {
             return Array.Empty<Platform>();
         }
 
+        var scale = screenScale > 0 ? screenScale : 1;
         var platforms = new List<Platform>();
         var occluders = new List<NativeRect>();
         var zOrder = 0;
@@ -60,7 +61,7 @@ internal static partial class WindowsInterop
                 if (rect.Top >= screenBounds.Y && rect.Top <= screenBounds.Bottom)
                 {
                     // Add only the top-edge portions not covered by higher Z-order windows.
-                    AddVisibleTopSegments(platforms, rect, occluders, screenBounds, currentZOrder);
+                    AddVisibleTopSegments(platforms, rect, occluders, screenBounds, scale, currentZOrder);
                 }
 
                 occluders.Add(rect);
@@ -99,6 +100,7 @@ internal static partial class WindowsInterop
         NativeRect rect,
         IReadOnlyList<NativeRect> occluders,
         PixelRect screenBounds,
+        double screenScale,
         int zOrder)
     {
         // Split the top edge around windows that are in front of this one.
@@ -137,13 +139,13 @@ internal static partial class WindowsInterop
             }
         }
 
-        var y = rect.Top - screenBounds.Y;
-        var bottom = Math.Min(rect.Bottom, screenBounds.Bottom) - screenBounds.Y;
-        foreach (var segment in segments.Where(s => s.Right - s.Left >= 32))
+        var y = (rect.Top - screenBounds.Y) / screenScale;
+        var bottom = (Math.Min(rect.Bottom, screenBounds.Bottom) - screenBounds.Y) / screenScale;
+        foreach (var segment in segments.Where(s => s.Right - s.Left >= 32 * screenScale))
         {
             platforms.Add(new Platform(
-                segment.Left - screenBounds.X,
-                segment.Right - screenBounds.X,
+                (segment.Left - screenBounds.X) / screenScale,
+                (segment.Right - screenBounds.X) / screenScale,
                 y,
                 bottom,
                 zOrder));

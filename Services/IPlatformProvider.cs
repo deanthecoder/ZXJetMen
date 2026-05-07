@@ -23,5 +23,5 @@ public interface IPlatformProvider
 {
     bool ShowSyntheticPlatforms { get; }
 
-    IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, IntPtr self);
+    IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, double screenScale, IntPtr self);
 }

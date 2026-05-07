@@ -35,6 +35,7 @@ public sealed class OverlayWindow : Window
     private readonly Stopwatch m_clock = Stopwatch.StartNew();
     private readonly Stopwatch m_totalClock = Stopwatch.StartNew();
     private PixelRect m_activeScreenBounds;
+    private double m_activeScreenScale = 1;
     private Timer m_timer;
     private int m_tickQueued;
 
@@ -90,7 +91,7 @@ public sealed class OverlayWindow : Window
             m_view.Step(
                 dt,
                 m_totalClock.Elapsed.TotalSeconds,
-                m_platformProvider.GetPlatforms(m_activeScreenBounds, DesktopInterop.GetHandle(this)));
+                m_platformProvider.GetPlatforms(m_activeScreenBounds, m_activeScreenScale, DesktopInterop.GetHandle(this)));
         }
         catch (Exception ex)
         {
@@ -110,11 +111,14 @@ public sealed class OverlayWindow : Window
         }
 
         m_activeScreenBounds = primary.Bounds;
+        m_activeScreenScale = primary.Scaling > 0 ? primary.Scaling : 1;
+        var logicalWidth = m_activeScreenBounds.Width / m_activeScreenScale;
+        var logicalHeight = m_activeScreenBounds.Height / m_activeScreenScale;
         Position = new PixelPoint(m_activeScreenBounds.X, m_activeScreenBounds.Y);
-        Width = m_activeScreenBounds.Width;
-        Height = m_activeScreenBounds.Height;
-        m_view.Width = m_activeScreenBounds.Width;
-        m_view.Height = m_activeScreenBounds.Height;
+        Width = logicalWidth;
+        Height = logicalHeight;
+        m_view.Width = logicalWidth;
+        m_view.Height = logicalHeight;
     }
 
     public void SetJetmanCount(int jetmanCount)
