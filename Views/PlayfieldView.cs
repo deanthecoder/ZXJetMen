@@ -480,7 +480,8 @@ public sealed class PlayfieldView : Control
             }
 
             // Recycle jetmen that fall past the bottom of the primary monitor.
-            if (!TryPickTopSpawnX(JetmanWidth, m_lastKnownPlatforms, out var respawnX))
+            if (!CanSpawnJetmen(m_lastKnownPlatforms) ||
+                !TryPickTopSpawnX(JetmanWidth, m_lastKnownPlatforms, out var respawnX))
             {
                 return;
             }
@@ -559,6 +560,11 @@ public sealed class PlayfieldView : Control
 
     private void SpawnNextJetman(double now)
     {
+        if (!CanSpawnJetmen(m_lastKnownPlatforms))
+        {
+            return;
+        }
+
         if (!m_jetmanSpawningStarted)
         {
             m_jetmanSpawningStarted = true;
@@ -584,6 +590,11 @@ public sealed class PlayfieldView : Control
         ChooseTreasure(jetman);
         m_jetmen.Add(jetman);
         m_nextJetmanSpawnAt = now + RandomSpawnDelay();
+    }
+
+    private bool CanSpawnJetmen(IReadOnlyList<Platform> platforms)
+    {
+        return GetTreasureSpawnCandidates(platforms).Count > 0;
     }
 
     private void StepTreasure(Treasure treasure, double dt, double now, IReadOnlyList<Platform> platforms)
@@ -652,11 +663,7 @@ public sealed class PlayfieldView : Control
 
     private void TrySpawnTreasure(Treasure treasure, IReadOnlyList<Platform> platforms)
     {
-        var candidates = platforms
-            .Where(s => s.Y >= MinTreasureY)
-            .Select(s => (Platform: s, Ranges: GetTopClearRanges(s.Left, s.Right - TreasureWidth, TreasureWidth, platforms)))
-            .Where(c => c.Ranges.Count > 0)
-            .ToList();
+        var candidates = GetTreasureSpawnCandidates(platforms);
 
         if (candidates.Count == 0)
         {
@@ -672,6 +679,15 @@ public sealed class PlayfieldView : Control
         treasure.Vy = 0;
         treasure.Active = true;
         treasure.Grounded = false;
+    }
+
+    private List<(Platform Platform, List<(double Left, double Right)> Ranges)> GetTreasureSpawnCandidates(IReadOnlyList<Platform> platforms)
+    {
+        return platforms
+            .Where(s => s.Y >= MinTreasureY)
+            .Select(s => (Platform: s, Ranges: GetTopClearRanges(s.Left, s.Right - TreasureWidth, TreasureWidth, platforms)))
+            .Where(c => c.Ranges.Count > 0)
+            .ToList();
     }
 
     private void ScheduleTreasureRespawn(Treasure treasure, double now)
