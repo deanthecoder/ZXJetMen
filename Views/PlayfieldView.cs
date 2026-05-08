@@ -41,6 +41,8 @@ public sealed class PlayfieldView : Control
     private const int CyanTintIndex = 2;
     private const int GreenTintIndex = 3;
     private const int YellowTintIndex = 4;
+    private const byte JetmanOutlineAlpha = 64;
+    private const byte SolidAlphaThreshold = 32;
     private const double NormalSpriteScale = 2;
     private const double MiniSpriteScale = 1;
     private const double Gravity = 100;
@@ -82,6 +84,7 @@ public sealed class PlayfieldView : Control
     private static readonly int[] SmokeSequence = [2, 1, 0, 1, 2];
     private readonly Bitmap m_spriteSheet = new(AssetLoader.Open(SpriteSheetUri));
     private readonly Bitmap m_smokeSheet = new(AssetLoader.Open(SmokeSheetUri));
+    private readonly Bitmap[,] m_jetmanSprites;
     private readonly Bitmap[,] m_treasureSprites;
     private double CellWidth => m_spriteSheet.Size.Width / SpriteSheetColumns;
     private double CellHeight => m_spriteSheet.Size.Height / SpriteSheetRows;
@@ -101,6 +104,7 @@ public sealed class PlayfieldView : Control
 
     public PlayfieldView(int jetmanLimit, bool miniMode)
     {
+        m_jetmanSprites = CreateOutlinedJetmanSprites();
         m_treasureSprites = CreateTreasureSprites();
         m_spriteScale = miniMode ? MiniSpriteScale : NormalSpriteScale;
         SetJetmanLimit(jetmanLimit);
@@ -275,26 +279,99 @@ public sealed class PlayfieldView : Control
             : jetman.Grounded
                 ? GetWalkFrame(jetman)
                 : 0;
-        var source = GetSheetSource(frame, row);
         var dest = new Rect(jetman.X, jetman.Y, JetmanWidth, JetmanHeight);
+        var sprite = m_jetmanSprites[frame, row];
 
         if ((Math.Abs(jetman.Vx) > 1 ? jetman.Vx : jetman.IntentDirection) > 0)
         {
             // The source art faces left, so mirror it for rightward walking.
             using (context.PushTransform(Matrix.CreateScale(-1, 1)))
             {
-                context.DrawImage(m_spriteSheet, source, new Rect(-(jetman.X + JetmanWidth), jetman.Y, JetmanWidth, JetmanHeight));
+                context.DrawImage(sprite, new Rect(-(jetman.X + JetmanWidth), jetman.Y, JetmanWidth, JetmanHeight));
             }
         }
         else
         {
-            context.DrawImage(m_spriteSheet, source, dest);
+            context.DrawImage(sprite, dest);
         }
     }
 
     private Rect GetSheetSource(int column, int row)
     {
         return new Rect(column * CellWidth, row * CellHeight, CellWidth, CellHeight);
+    }
+
+    private static Bitmap[,] CreateOutlinedJetmanSprites()
+    {
+        var sprites = new Bitmap[SpriteSheetColumns, 2];
+
+        using var stream = AssetLoader.Open(SpriteSheetUri);
+        using var sheet = SKBitmap.Decode(stream);
+        var cellWidth = sheet.Width / SpriteSheetColumns;
+        var cellHeight = sheet.Height / SpriteSheetRows;
+
+        for (var row = WalkRow; row <= FlyRow; row++)
+        {
+            for (var column = 0; column < SpriteSheetColumns; column++)
+            {
+                sprites[column, row] = CreateOutlinedJetmanSprite(sheet, column, row, cellWidth, cellHeight);
+            }
+        }
+
+        return sprites;
+    }
+
+    private static Bitmap CreateOutlinedJetmanSprite(SKBitmap sheet, int column, int row, int cellWidth, int cellHeight)
+    {
+        var imageInfo = new SKImageInfo(cellWidth, cellHeight, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        using var output = new SKBitmap(imageInfo);
+        output.Erase(SKColors.Transparent);
+
+        for (var y = 0; y < cellHeight; y++)
+        {
+            for (var x = 0; x < cellWidth; x++)
+            {
+                var source = sheet.GetPixel(column * cellWidth + x, row * cellHeight + y);
+                if (source.Alpha > 0)
+                {
+                    output.SetPixel(x, y, source);
+                }
+                else if (TouchesSolidPixel(sheet, column, row, cellWidth, cellHeight, x, y))
+                {
+                    output.SetPixel(x, y, new SKColor(0, 0, 0, JetmanOutlineAlpha));
+                }
+            }
+        }
+
+        return EncodeBitmap(output);
+    }
+
+    private static bool TouchesSolidPixel(SKBitmap sheet, int column, int row, int cellWidth, int cellHeight, int x, int y)
+    {
+        for (var dy = -1; dy <= 1; dy++)
+        {
+            for (var dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0)
+                {
+                    continue;
+                }
+
+                var nx = x + dx;
+                var ny = y + dy;
+                if (nx < 0 || nx >= cellWidth || ny < 0 || ny >= cellHeight)
+                {
+                    continue;
+                }
+
+                if (sheet.GetPixel(column * cellWidth + nx, row * cellHeight + ny).Alpha > SolidAlphaThreshold)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static Bitmap[,] CreateTreasureSprites()
@@ -354,7 +431,12 @@ public sealed class PlayfieldView : Control
             }
         }
 
-        using var image = SKImage.FromBitmap(output);
+        return EncodeBitmap(output);
+    }
+
+    private static Bitmap EncodeBitmap(SKBitmap bitmap)
+    {
+        using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         using var encoded = new MemoryStream(data.ToArray());
         return new Bitmap(encoded);
