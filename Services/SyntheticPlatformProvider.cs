@@ -23,6 +23,8 @@ public sealed class SyntheticPlatformProvider : IPlatformProvider
 {
     public bool ShowSyntheticPlatforms => true;
 
+    public bool IsFrontmostWindowFullscreen => false;
+
     public IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, double screenScale, IntPtr self)
     {
         if (screenBounds.Width <= 0 || screenBounds.Height <= 0)

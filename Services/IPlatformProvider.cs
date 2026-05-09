@@ -23,5 +23,7 @@ public interface IPlatformProvider
 {
     bool ShowSyntheticPlatforms { get; }
 
+    bool IsFrontmostWindowFullscreen { get; }
+
     IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, double screenScale, IntPtr self);
 }

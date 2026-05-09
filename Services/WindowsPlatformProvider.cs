@@ -24,8 +24,12 @@ public sealed class WindowsPlatformProvider : IPlatformProvider
 {
     public bool ShowSyntheticPlatforms => false;
 
+    public bool IsFrontmostWindowFullscreen { get; private set; }
+
     public IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, double screenScale, IntPtr self)
     {
-        return WindowsInterop.GetPlatforms(screenBounds, screenScale, self);
+        var platforms = WindowsInterop.GetPlatforms(screenBounds, screenScale, self, out var isFrontmostWindowFullscreen);
+        IsFrontmostWindowFullscreen = isFrontmostWindowFullscreen;
+        return platforms;
     }
 }

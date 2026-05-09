@@ -86,10 +86,12 @@ public sealed class OverlayWindow : Window
             // Clamp large pauses so debugging/breakpoints do not launch jetmen through platforms.
             var dt = Math.Min(m_clock.Elapsed.TotalSeconds, 0.1);
             m_clock.Restart();
+            var platforms = m_platformProvider.GetPlatforms(m_activeScreenBounds, m_activeScreenScale, DesktopInterop.GetHandle(this));
             m_view.Step(
                 dt,
                 m_totalClock.Elapsed.TotalSeconds,
-                m_platformProvider.GetPlatforms(m_activeScreenBounds, m_activeScreenScale, DesktopInterop.GetHandle(this)));
+                platforms,
+                m_platformProvider.IsFrontmostWindowFullscreen);
         }
         catch (Exception ex)
         {

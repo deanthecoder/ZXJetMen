@@ -72,6 +72,7 @@ public sealed class PlayfieldView : Control
     private const double MinTreasureBounceSpeed = 24;
     private const double MaxTreasureBounceSpeed = 48;
     private const double TreasureBounceDamping = 0.35;
+    private const double EvacuationHorizontalSpeedMultiplier = 1.35;
     private readonly Random m_random = new();
     private readonly List<Jetman> m_jetmen = new();
     private readonly List<Treasure> m_treasures = new();
@@ -125,32 +126,35 @@ public sealed class PlayfieldView : Control
         InvalidateVisual();
     }
 
-    public void Step(double dt, double now, IReadOnlyList<Platform> platforms)
+    public void Step(double dt, double now, IReadOnlyList<Platform> platforms, bool isFrontmostWindowFullscreen)
     {
         m_lastKnownPlatforms = platforms;
+        var isEvacuating = isFrontmostWindowFullscreen || !CanSpawnJetmen(platforms);
 
         if (!m_treasuresInitialized)
         {
-            InitializeTreasures(now);
+            InitializeTreasures(now, isEvacuating);
         }
         else
         {
-            ReconcileTreasureCount(now);
+            ReconcileTreasureCount(now, isEvacuating);
         }
 
         foreach (var treasure in m_treasures)
         {
-            StepTreasure(treasure, dt, now, platforms);
+            StepTreasure(treasure, dt, now, platforms, isEvacuating);
         }
 
-        if (m_treasures.Count > 0 && m_treasures.All(t => t.Active && t.Grounded))
+        if (!isEvacuating &&
+            m_treasures.Count > 0 &&
+            m_treasures.All(t => t.Active && t.Grounded))
         {
             SpawnNextJetman(now);
         }
 
         foreach (var jetman in m_jetmen.ToArray())
         {
-            StepJetman(jetman, dt, now, platforms);
+            StepJetman(jetman, dt, now, platforms, isEvacuating);
         }
 
         InvalidateVisual();
@@ -443,18 +447,27 @@ public sealed class PlayfieldView : Control
         return (byte)(channel * intensity / 255);
     }
 
-    private void StepJetman(Jetman jetman, double dt, double now, IReadOnlyList<Platform> platforms)
+    private void StepJetman(Jetman jetman, double dt, double now, IReadOnlyList<Platform> platforms, bool isFrontmostWindowFullscreen)
     {
         var previousBottom = jetman.Y + JetmanHeight;
         jetman.DirectionCooldown = Math.Max(0, jetman.DirectionCooldown - dt);
         jetman.SmokeAnimationTime += dt;
         jetman.WantsDrop = false;
-        var currentSupport = jetman.Retiring ? null : FindSupport(jetman, jetman.X, platforms);
+        if (isFrontmostWindowFullscreen && !jetman.Retiring)
+        {
+            StartEvacuating(jetman);
+        }
+
+        var currentSupport = jetman.Retiring || jetman.EvacuationRoute != EvacuationRoute.None ? null : FindSupport(jetman, jetman.X, platforms);
         if (jetman.Retiring)
         {
             jetman.Treasure = null;
             jetman.Grounded = false;
             jetman.FlyTimeRemaining = 0;
+        }
+        else if (jetman.EvacuationRoute != EvacuationRoute.None)
+        {
+            UpdateEvacuation(jetman);
         }
         else
         {
@@ -463,6 +476,7 @@ public sealed class PlayfieldView : Control
         }
 
         if (!jetman.Retiring &&
+            jetman.EvacuationRoute == EvacuationRoute.None &&
             jetman.FlyTimeRemaining <= 0 &&
             m_random.NextDouble() < FlyChancePerSecond * dt)
         {
@@ -470,7 +484,7 @@ public sealed class PlayfieldView : Control
             jetman.Grounded = false;
         }
 
-        if (jetman.Grounded || jetman.FlyTimeRemaining > 0 || jetman.Treasure is not null)
+        if (jetman.Grounded || jetman.FlyTimeRemaining > 0 || jetman.Treasure is not null || jetman.EvacuationRoute != EvacuationRoute.None)
         {
             // Walk/fly horizontally, blocking only against windows in front of the support.
             var previousX = jetman.X;
@@ -479,12 +493,19 @@ public sealed class PlayfieldView : Control
 
             jetman.WalkDistance += Math.Abs(jetman.X - previousX);
 
-            if (!jetman.Retiring && jetman.Grounded && jetman.Treasure is null && m_random.NextDouble() < 0.003)
+            if (!jetman.Retiring &&
+                jetman.EvacuationRoute == EvacuationRoute.None &&
+                jetman.Grounded &&
+                jetman.Treasure is null &&
+                m_random.NextDouble() < 0.003)
             {
                 TrySetIntent(jetman, -jetman.IntentDirection);
             }
 
-            if (!jetman.Retiring && jetman.Grounded && FindSupport(jetman, jetman.X, platforms) is null)
+            if (!jetman.Retiring &&
+                jetman.EvacuationRoute == EvacuationRoute.None &&
+                jetman.Grounded &&
+                FindSupport(jetman, jetman.X, platforms) is null)
             {
                 jetman.Vy = 0;
                 if (!jetman.WantsDrop)
@@ -510,7 +531,7 @@ public sealed class PlayfieldView : Control
             jetman.Vy = Math.Min(MaxVerticalSpeed, jetman.Vy + Gravity * dt);
             jetman.Y += jetman.Vy * dt;
 
-            var landed = jetman.Retiring
+            var landed = jetman.Retiring || jetman.EvacuationRoute != EvacuationRoute.None
                 ? null
                 : FindLandingPlatform(jetman, platforms, previousBottom, jetman.Y + JetmanHeight);
             if (jetman.Vy >= 0 && landed is not null)
@@ -528,6 +549,16 @@ public sealed class PlayfieldView : Control
                     TrySetIntent(jetman, -jetman.IntentDirection);
                 }
             }
+        }
+
+        if (jetman.EvacuationRoute != EvacuationRoute.None)
+        {
+            if (HasEvacuated(jetman))
+            {
+                m_jetmen.Remove(jetman);
+            }
+
+            return;
         }
 
         if (jetman.Treasure is not null)
@@ -601,16 +632,20 @@ public sealed class PlayfieldView : Control
 
     private IReadOnlyList<Platform> m_lastKnownPlatforms = Array.Empty<Platform>();
 
-    private void InitializeTreasures(double now)
+    private void InitializeTreasures(double now, bool isFrontmostWindowFullscreen)
     {
         m_treasures.Clear();
-        ReconcileTreasureCount(now);
+        ReconcileTreasureCount(now, isFrontmostWindowFullscreen);
         m_treasuresInitialized = true;
     }
 
-    private void ReconcileTreasureCount(double now)
+    private void ReconcileTreasureCount(double now, bool isFrontmostWindowFullscreen)
     {
         TrimExcessJetmenAndTreasures();
+        if (isFrontmostWindowFullscreen)
+        {
+            return;
+        }
 
         var spawnAt = Math.Max(now, m_treasures.Count == 0 ? now : m_treasures.Max(t => t.SpawnAt));
         while (m_treasures.Count < m_jetmanLimit)
@@ -680,11 +715,11 @@ public sealed class PlayfieldView : Control
         return GetTreasureSpawnCandidates(platforms).Count > 0;
     }
 
-    private void StepTreasure(Treasure treasure, double dt, double now, IReadOnlyList<Platform> platforms)
+    private void StepTreasure(Treasure treasure, double dt, double now, IReadOnlyList<Platform> platforms, bool isFrontmostWindowFullscreen)
     {
         if (!treasure.Active)
         {
-            if (now >= treasure.SpawnAt)
+            if (!isFrontmostWindowFullscreen && now >= treasure.SpawnAt)
             {
                 TrySpawnTreasure(treasure, platforms);
             }
@@ -692,11 +727,18 @@ public sealed class PlayfieldView : Control
             return;
         }
 
-        ClearMissingTreasureLanding(treasure, platforms);
+        if (isFrontmostWindowFullscreen)
+        {
+            treasure.TargetLandingY = null;
+        }
+        else
+        {
+            ClearMissingTreasureLanding(treasure, platforms);
+        }
 
         var previousBottom = treasure.Y + TreasureHeight;
         var wasGrounded = treasure.Grounded;
-        var support = FindTreasureSupport(treasure, platforms);
+        var support = isFrontmostWindowFullscreen ? null : FindTreasureSupport(treasure, platforms);
         if (support is not null && treasure.Vy >= 0)
         {
             treasure.Y = support.Value.Y - TreasureHeight;
@@ -718,7 +760,9 @@ public sealed class PlayfieldView : Control
             treasure.Vy = Math.Min(MaxVerticalSpeed, treasure.Vy + Gravity * dt);
             treasure.Y += treasure.Vy * dt;
 
-            var landed = FindTreasureLandingPlatform(treasure, platforms, previousBottom, treasure.Y + TreasureHeight);
+            var landed = isFrontmostWindowFullscreen
+                ? null
+                : FindTreasureLandingPlatform(treasure, platforms, previousBottom, treasure.Y + TreasureHeight);
             if (treasure.Vy >= 0 && landed is not null)
             {
                 treasure.Y = landed.Value.Y - TreasureHeight;
@@ -1010,6 +1054,72 @@ public sealed class PlayfieldView : Control
         jetman.Grounded = false;
         jetman.FlyTimeRemaining = 0;
         jetman.Vy = Math.Max(jetman.Vy, 0);
+    }
+
+    private void StartEvacuating(Jetman jetman)
+    {
+        if (jetman.EvacuationRoute != EvacuationRoute.None)
+        {
+            return;
+        }
+
+        var distances = new[]
+        {
+            (Route: EvacuationRoute.Left, Distance: jetman.X + JetmanWidth),
+            (Route: EvacuationRoute.Right, Distance: Bounds.Width - jetman.X),
+            (Route: EvacuationRoute.Top, Distance: jetman.Y + JetmanHeight),
+            (Route: EvacuationRoute.Bottom, Distance: Bounds.Height - jetman.Y)
+        };
+
+        jetman.EvacuationRoute = distances
+            .OrderBy(d => d.Distance)
+            .First()
+            .Route;
+        jetman.Treasure = null;
+        jetman.DirectionCooldown = 0;
+    }
+
+    private void UpdateEvacuation(Jetman jetman)
+    {
+        jetman.Treasure = null;
+        switch (jetman.EvacuationRoute)
+        {
+            case EvacuationRoute.Left:
+                jetman.IntentDirection = -1;
+                jetman.Vx = Math.Min(jetman.Vx, -WalkSpeed * EvacuationHorizontalSpeedMultiplier);
+                break;
+
+            case EvacuationRoute.Right:
+                jetman.IntentDirection = 1;
+                jetman.Vx = Math.Max(jetman.Vx, WalkSpeed * EvacuationHorizontalSpeedMultiplier);
+                break;
+
+            case EvacuationRoute.Top:
+                jetman.IntentDirection = 0;
+                StartFlying(jetman, 0.35);
+                jetman.Grounded = false;
+                break;
+
+            case EvacuationRoute.Bottom:
+                jetman.IntentDirection = 0;
+                jetman.Grounded = false;
+                jetman.FlyTimeRemaining = 0;
+                jetman.Vx = 0;
+                jetman.WantsDrop = true;
+                break;
+        }
+    }
+
+    private bool HasEvacuated(Jetman jetman)
+    {
+        return jetman.EvacuationRoute switch
+        {
+            EvacuationRoute.Left => jetman.X + JetmanWidth < 0,
+            EvacuationRoute.Right => jetman.X > Bounds.Width,
+            EvacuationRoute.Top => jetman.Y + JetmanHeight < 0,
+            EvacuationRoute.Bottom => jetman.Y > Bounds.Height,
+            _ => false
+        };
     }
 
     private bool IsAtTreasure(Jetman jetman, Treasure treasure)
@@ -1488,6 +1598,16 @@ public sealed class PlayfieldView : Control
         public bool Grounded { get; set; }
         public bool Retiring { get; set; }
         public bool WantsDrop { get; set; }
+        public EvacuationRoute EvacuationRoute { get; set; }
+    }
+
+    private enum EvacuationRoute
+    {
+        None,
+        Left,
+        Right,
+        Top,
+        Bottom
     }
 
     /// <summary>

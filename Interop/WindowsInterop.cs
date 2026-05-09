@@ -23,8 +23,9 @@ namespace ZXJetMen.Interop;
 /// </remarks>
 internal static partial class WindowsInterop
 {
-    public static IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, double screenScale, IntPtr self)
+    public static IReadOnlyList<Platform> GetPlatforms(PixelRect screenBounds, double screenScale, IntPtr self, out bool isFrontmostWindowFullscreen)
     {
+        isFrontmostWindowFullscreen = false;
         if (!OperatingSystem.IsWindows() || screenBounds.Width <= 0 || screenBounds.Height <= 0)
         {
             return Array.Empty<Platform>();
@@ -34,6 +35,7 @@ internal static partial class WindowsInterop
         var platforms = new List<Platform>();
         var occluders = new List<NativeRect>();
         var zOrder = 0;
+        var frontmostWindowIsFullscreen = false;
 
         // EnumWindows returns top-level windows from front to back.
         EnumWindows((hwnd, _) =>
@@ -46,6 +48,11 @@ internal static partial class WindowsInterop
             if (GetWindowRect(hwnd, out var rect))
             {
                 var currentZOrder = zOrder++;
+                if (currentZOrder == 0 && IsFullscreenWindow(rect, screenBounds))
+                {
+                    frontmostWindowIsFullscreen = true;
+                }
+
                 var width = rect.Right - rect.Left;
                 var height = rect.Bottom - rect.Top;
                 if (width <= 80 ||
@@ -70,7 +77,17 @@ internal static partial class WindowsInterop
             return true;
         }, IntPtr.Zero);
 
+        isFrontmostWindowFullscreen = frontmostWindowIsFullscreen;
         return platforms;
+    }
+
+    private static bool IsFullscreenWindow(NativeRect rect, PixelRect screenBounds)
+    {
+        const int tolerance = 4;
+        return rect.Left <= screenBounds.X + tolerance &&
+               rect.Top <= screenBounds.Y + tolerance &&
+               rect.Right >= screenBounds.Right - tolerance &&
+               rect.Bottom >= screenBounds.Bottom - tolerance;
     }
 
     private static bool IsUsableWindow(IntPtr hwnd)
