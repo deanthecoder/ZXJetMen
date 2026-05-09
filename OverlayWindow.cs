@@ -11,7 +11,6 @@
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
@@ -56,7 +55,6 @@ public sealed class OverlayWindow : Window
         Topmost = true;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         WindowStartupLocation = WindowStartupLocation.Manual;
-        Cursor = new Cursor(StandardCursorType.None);
         m_view.ShowSyntheticPlatforms = m_platformProvider.ShowSyntheticPlatforms;
 
         Opened += (_, _) =>
