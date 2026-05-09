@@ -8,7 +8,7 @@ ZXJetMen is a little retro desktop toy inspired by the bright, chunky, beautiful
 
 It drops tiny jetmen onto your desktop, lets treasures tumble in from above, and turns your windows into platforms for a miniature 8-bit scramble. They walk, thrust, fall, chase treasure, and occasionally make a charming mess of the place.
 
-![ZXJetMen running on the desktop](img/screenshot.png)
+![ZXJetMen running on the desktop](img/zxjetmen-demo.gif)
 
 ## What You Get
 

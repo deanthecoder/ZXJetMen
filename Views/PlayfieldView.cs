@@ -146,8 +146,7 @@ public sealed class PlayfieldView : Control
         }
 
         if (!isEvacuating &&
-            m_treasures.Count > 0 &&
-            m_treasures.All(t => t.Active && t.Grounded))
+            m_treasures.Any(IsAvailableTreasure))
         {
             SpawnNextJetman(now);
         }
@@ -1015,6 +1014,11 @@ public sealed class PlayfieldView : Control
         }
     }
 
+    private bool IsAvailableTreasure(Treasure treasure)
+    {
+        return treasure.Active && treasure.Y >= MinTreasureY && treasure.Y <= Bounds.Height;
+    }
+
     private Treasure FindCollectedTreasure(Jetman jetman)
     {
         return m_treasures
@@ -1142,7 +1146,7 @@ public sealed class PlayfieldView : Control
             .ToHashSet();
 
         var candidates = m_treasures
-            .Where(t => t.Active && t.Y >= MinTreasureY && t.Y <= Bounds.Height)
+            .Where(IsAvailableTreasure)
             .Where(t => !assignedTreasures.Contains(t))
             .ToList();
 
