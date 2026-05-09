@@ -62,6 +62,8 @@ public sealed class PlayfieldView : Control
     private const double TreasureSteerDeadZone = 12;
     private const double ClimbThreshold = 18;
     private const double DescendThreshold = 10;
+    private const double NavigationMaxClimb = 260;
+    private const double NavigationMaxHorizontalGap = 180;
     private const double SlowFallDistance = 80;
     private const double MaxFallSpeedNearTreasure = 80;
     private const double DirectionChangeCooldownSeconds = 1;
@@ -73,7 +75,7 @@ public sealed class PlayfieldView : Control
     private bool m_treasuresInitialized;
     private bool m_jetmanSpawningStarted;
     private int m_jetmanLimit;
-    private double m_spriteScale = NormalSpriteScale;
+    private double m_spriteScale;
     private double m_nextJetmanSpawnAt;
 
     // 4x3 sheet: walk row, fly row, treasure row.
@@ -109,10 +111,6 @@ public sealed class PlayfieldView : Control
         m_spriteScale = miniMode ? MiniSpriteScale : NormalSpriteScale;
         SetJetmanLimit(jetmanLimit);
     }
-
-    public int JetmanLimit => m_jetmanLimit;
-
-    public bool MiniMode => m_spriteScale == MiniSpriteScale;
 
     public void Reset()
     {
@@ -296,11 +294,6 @@ public sealed class PlayfieldView : Control
         }
     }
 
-    private Rect GetSheetSource(int column, int row)
-    {
-        return new Rect(column * CellWidth, row * CellHeight, CellWidth, CellHeight);
-    }
-
     private static Bitmap[,] CreateOutlinedJetmanSprites()
     {
         var sprites = new Bitmap[SpriteSheetColumns, 2];
@@ -452,6 +445,7 @@ public sealed class PlayfieldView : Control
         var previousBottom = jetman.Y + JetmanHeight;
         jetman.DirectionCooldown = Math.Max(0, jetman.DirectionCooldown - dt);
         jetman.SmokeAnimationTime += dt;
+        jetman.WantsDrop = false;
         var currentSupport = jetman.Retiring ? null : FindSupport(jetman, jetman.X, platforms);
         if (jetman.Retiring)
         {
@@ -489,9 +483,13 @@ public sealed class PlayfieldView : Control
 
             if (!jetman.Retiring && jetman.Grounded && FindSupport(jetman, jetman.X, platforms) is null)
             {
-                // At a platform edge, give a short thrust burst instead of just dropping.
                 jetman.Vy = 0;
-                StartFlying(jetman, EdgeFlyDurationSeconds);
+                if (!jetman.WantsDrop)
+                {
+                    // At a platform edge, give a short thrust burst instead of just dropping.
+                    StartFlying(jetman, EdgeFlyDurationSeconds);
+                }
+
                 jetman.Grounded = false;
             }
         }
@@ -691,6 +689,8 @@ public sealed class PlayfieldView : Control
             return;
         }
 
+        ClearMissingTreasureLanding(treasure, platforms);
+
         var previousBottom = treasure.Y + TreasureHeight;
         var support = FindTreasureSupport(treasure, platforms);
         if (support is not null && treasure.Vy >= 0)
@@ -698,6 +698,7 @@ public sealed class PlayfieldView : Control
             treasure.Y = support.Value.Y - TreasureHeight;
             treasure.Vy = 0;
             treasure.Grounded = true;
+            treasure.TargetLandingY = null;
         }
         else
         {
@@ -711,6 +712,7 @@ public sealed class PlayfieldView : Control
                 treasure.Y = landed.Value.Y - TreasureHeight;
                 treasure.Vy = 0;
                 treasure.Grounded = true;
+                treasure.TargetLandingY = null;
             }
         }
 
@@ -720,14 +722,43 @@ public sealed class PlayfieldView : Control
         }
     }
 
+    private void ClearMissingTreasureLanding(Treasure treasure, IReadOnlyList<Platform> platforms)
+    {
+        if (treasure.TargetLandingY is null)
+        {
+            return;
+        }
+
+        var centerX = treasure.X + TreasureWidth / 2;
+        var targetStillExists = platforms.Any(s =>
+            Math.Abs(s.Y - treasure.TargetLandingY.Value) < 0.5 &&
+            centerX >= s.Left &&
+            centerX <= s.Right);
+
+        if (!targetStillExists)
+        {
+            treasure.TargetLandingY = null;
+        }
+    }
+
     private Platform? FindTreasureSupport(Treasure treasure, IReadOnlyList<Platform> platforms)
     {
         var footX = treasure.X + TreasureWidth / 2;
         var footY = treasure.Y + TreasureHeight;
 
-        return platforms
+        var candidates = platforms
             .Where(s => Math.Abs(s.Y - footY) < 3 && footX >= s.Left && footX <= s.Right)
             .OrderBy(s => s.ZOrder)
+            .ToList();
+
+        if (treasure.TargetLandingY is not null)
+        {
+            candidates = candidates
+                .Where(s => s.Y >= treasure.TargetLandingY.Value - 0.5)
+                .ToList();
+        }
+
+        return candidates
             .Select(s => (Platform?)s)
             .FirstOrDefault();
     }
@@ -736,9 +767,27 @@ public sealed class PlayfieldView : Control
     {
         var centerX = treasure.X + TreasureWidth / 2;
 
-        return platforms
+        var candidates = platforms
             .Where(s => previousBottom <= s.Y && currentBottom >= s.Y && centerX >= s.Left && centerX <= s.Right)
             .OrderBy(s => s.Y)
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        if (treasure.TargetLandingY is not null)
+        {
+            var targetLanding = candidates
+                .Where(s => s.Y >= treasure.TargetLandingY.Value - 0.5)
+                .Select(s => (Platform?)s)
+                .FirstOrDefault();
+
+            return targetLanding;
+        }
+
+        return candidates
             .Select(s => (Platform?)s)
             .FirstOrDefault();
     }
@@ -761,6 +810,7 @@ public sealed class PlayfieldView : Control
         treasure.Vy = 0;
         treasure.Active = true;
         treasure.Grounded = false;
+        treasure.TargetLandingY = candidate.Platform.Y;
     }
 
     private List<(Platform Platform, List<(double Left, double Right)> Ranges)> GetTreasureSpawnCandidates(IReadOnlyList<Platform> platforms)
@@ -778,6 +828,7 @@ public sealed class PlayfieldView : Control
         treasure.Grounded = false;
         treasure.Vy = 0;
         treasure.Y = -TreasureHeight;
+        treasure.TargetLandingY = null;
         treasure.SpawnAt = now + RandomSpawnDelay();
     }
 
@@ -921,7 +972,7 @@ public sealed class PlayfieldView : Control
         }
     }
 
-    private void RetireJetman(Jetman jetman)
+    private static void RetireJetman(Jetman jetman)
     {
         jetman.Retiring = true;
         jetman.Treasure = null;
@@ -1016,16 +1067,21 @@ public sealed class PlayfieldView : Control
         var steerX = treasureX;
         if (jetman.Grounded &&
             currentSupport is not null &&
+            TrySteerAlongPlatformPath(jetman, currentSupport.Value, treasureX, out steerX))
+        {
+            SteerToward(jetman, steerX);
+            return;
+        }
+
+        if (jetman.Grounded &&
+            currentSupport is not null &&
             jetman.Treasure.Y + TreasureHeight > currentSupport.Value.Y + DescendThreshold)
         {
             steerX = PickDescentEdgeX(treasureX, currentSupport.Value);
+            jetman.WantsDrop = true;
         }
 
-        var dx = SignedWrappedDelta(jetman.X, steerX);
-        if (Math.Abs(dx) > TreasureSteerDeadZone)
-        {
-            TrySetIntent(jetman, dx > 0 ? 1 : -1);
-        }
+        SteerToward(jetman, steerX);
 
         var treasureY = jetman.Treasure.Y + TreasureHeight - JetmanHeight;
         var treasureAbove = treasureY < jetman.Y - ClimbThreshold;
@@ -1039,6 +1095,220 @@ public sealed class PlayfieldView : Control
             StartFlying(jetman, Math.Min(FlyDurationSeconds, 0.35));
             jetman.Grounded = false;
         }
+    }
+
+    private bool TrySteerAlongPlatformPath(Jetman jetman, Platform currentSupport, double treasureX, out double steerX)
+    {
+        steerX = treasureX;
+        var targetSupport = FindTreasureSupport(jetman.Treasure, m_lastKnownPlatforms);
+        if (targetSupport is null || SamePlatform(currentSupport, targetSupport.Value))
+        {
+            return false;
+        }
+
+        if (!TryFindNextPlatform(currentSupport, targetSupport.Value, out var nextPlatform))
+        {
+            return false;
+        }
+
+        steerX = PickTransitionX(jetman, currentSupport, nextPlatform, treasureX);
+        jetman.WantsDrop = nextPlatform.Y > currentSupport.Y + DescendThreshold;
+        if (nextPlatform.Y < currentSupport.Y - ClimbThreshold &&
+            Math.Abs(SignedWrappedDelta(jetman.X, steerX)) <= TreasureSteerDeadZone)
+        {
+            StartFlying(jetman, Math.Min(FlyDurationSeconds, 0.45));
+            jetman.Grounded = false;
+        }
+
+        return true;
+    }
+
+    private void SteerToward(Jetman jetman, double steerX)
+    {
+        var dx = SignedWrappedDelta(jetman.X, steerX);
+        if (Math.Abs(dx) > TreasureSteerDeadZone)
+        {
+            TrySetIntent(jetman, dx > 0 ? 1 : -1);
+        }
+    }
+
+    private bool TryFindNextPlatform(Platform start, Platform target, out Platform nextPlatform)
+    {
+        nextPlatform = default;
+        var platforms = m_lastKnownPlatforms.ToList();
+        var startIndex = platforms.FindIndex(p => SamePlatform(p, start));
+        var targetIndex = platforms.FindIndex(p => SamePlatform(p, target));
+        if (startIndex < 0 || targetIndex < 0 || startIndex == targetIndex)
+        {
+            return false;
+        }
+
+        var open = new PriorityQueue<int, double>();
+        var cameFrom = new Dictionary<int, int>();
+        var gScore = Enumerable.Repeat(double.PositiveInfinity, platforms.Count).ToArray();
+        gScore[startIndex] = 0;
+        open.Enqueue(startIndex, PlatformDistance(start, target));
+
+        var closed = new bool[platforms.Count];
+        while (open.Count > 0)
+        {
+            var currentIndex = open.Dequeue();
+            if (closed[currentIndex])
+            {
+                continue;
+            }
+
+            if (currentIndex == targetIndex)
+            {
+                return TryExtractNextPlatform(platforms, cameFrom, startIndex, targetIndex, out nextPlatform);
+            }
+
+            closed[currentIndex] = true;
+            for (var neighbourIndex = 0; neighbourIndex < platforms.Count; neighbourIndex++)
+            {
+                if (neighbourIndex == currentIndex ||
+                    closed[neighbourIndex] ||
+                    !CanNavigateBetween(platforms[currentIndex], platforms[neighbourIndex]))
+                {
+                    continue;
+                }
+
+                var tentativeScore = gScore[currentIndex] + PlatformDistance(platforms[currentIndex], platforms[neighbourIndex]);
+                if (tentativeScore >= gScore[neighbourIndex])
+                {
+                    continue;
+                }
+
+                cameFrom[neighbourIndex] = currentIndex;
+                gScore[neighbourIndex] = tentativeScore;
+                open.Enqueue(neighbourIndex, tentativeScore + PlatformDistance(platforms[neighbourIndex], target));
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryExtractNextPlatform(
+        IReadOnlyList<Platform> platforms,
+        IReadOnlyDictionary<int, int> cameFrom,
+        int startIndex,
+        int targetIndex,
+        out Platform nextPlatform)
+    {
+        var currentIndex = targetIndex;
+        while (cameFrom.TryGetValue(currentIndex, out var previousIndex) && previousIndex != startIndex)
+        {
+            currentIndex = previousIndex;
+        }
+
+        if (!cameFrom.ContainsKey(currentIndex) && currentIndex != targetIndex)
+        {
+            nextPlatform = default;
+            return false;
+        }
+
+        nextPlatform = platforms[currentIndex];
+        return currentIndex != startIndex;
+    }
+
+    private bool CanNavigateBetween(Platform from, Platform to)
+    {
+        if (SamePlatform(from, to))
+        {
+            return false;
+        }
+
+        if (to.Y > from.Y + DescendThreshold)
+        {
+            return TryGetDropExitX(from, to, out _);
+        }
+
+        if (to.Y < from.Y - ClimbThreshold)
+        {
+            return from.Y - to.Y <= NavigationMaxClimb &&
+                   HorizontalGap(from, to) <= NavigationMaxHorizontalGap;
+        }
+
+        return HorizontalGap(from, to) <= JetmanWidth;
+    }
+
+    private double PickTransitionX(Jetman jetman, Platform from, Platform to, double treasureX)
+    {
+        if (to.Y > from.Y + DescendThreshold && TryGetDropExitX(from, to, out var dropExitX))
+        {
+            return dropExitX;
+        }
+
+        var nextCenterX = (to.Left + to.Right - JetmanWidth) / 2;
+        var targetX = SamePlatform(to, FindTreasureSupport(jetman.Treasure, m_lastKnownPlatforms) ?? default)
+            ? treasureX
+            : nextCenterX;
+
+        return Math.Clamp(targetX, from.Left - JetmanWidth / 2, from.Right - JetmanWidth / 2);
+    }
+
+    private bool TryGetDropExitX(Platform from, Platform to, out double exitX)
+    {
+        var leftExitX = from.Left - JetmanWidth;
+        var rightExitX = from.Right;
+        var leftCenterX = leftExitX + JetmanWidth / 2;
+        var rightCenterX = rightExitX + JetmanWidth / 2;
+        var canUseLeft = leftCenterX >= to.Left && leftCenterX <= to.Right;
+        var canUseRight = rightCenterX >= to.Left && rightCenterX <= to.Right;
+
+        if (canUseLeft && canUseRight)
+        {
+            var toCenter = (to.Left + to.Right) / 2;
+            exitX = Math.Abs(leftCenterX - toCenter) < Math.Abs(rightCenterX - toCenter)
+                ? leftExitX
+                : rightExitX;
+            return true;
+        }
+
+        if (canUseLeft)
+        {
+            exitX = leftExitX;
+            return true;
+        }
+
+        if (canUseRight)
+        {
+            exitX = rightExitX;
+            return true;
+        }
+
+        exitX = 0;
+        return false;
+    }
+
+    private static double PlatformDistance(Platform a, Platform b)
+    {
+        var ax = (a.Left + a.Right) / 2;
+        var bx = (b.Left + b.Right) / 2;
+        return Math.Abs(ax - bx) + Math.Abs(a.Y - b.Y);
+    }
+
+    private static double HorizontalGap(Platform a, Platform b)
+    {
+        if (a.Right < b.Left)
+        {
+            return b.Left - a.Right;
+        }
+
+        if (b.Right < a.Left)
+        {
+            return a.Left - b.Right;
+        }
+
+        return 0;
+    }
+
+    private static bool SamePlatform(Platform a, Platform b)
+    {
+        return Math.Abs(a.Left - b.Left) < 0.5 &&
+               Math.Abs(a.Right - b.Right) < 0.5 &&
+               Math.Abs(a.Y - b.Y) < 0.5 &&
+               Math.Abs(a.Bottom - b.Bottom) < 0.5;
     }
 
     private double PickDescentEdgeX(double treasureX, Platform support)
@@ -1186,6 +1456,7 @@ public sealed class PlayfieldView : Control
         public int IntentDirection { get; set; } = 1;
         public bool Grounded { get; set; }
         public bool Retiring { get; set; }
+        public bool WantsDrop { get; set; }
     }
 
     /// <summary>
@@ -1204,5 +1475,6 @@ public sealed class PlayfieldView : Control
         public bool Active { get; set; }
         public double SpawnAt { get; set; }
         public bool Grounded { get; set; }
+        public double? TargetLandingY { get; set; }
     }
 }

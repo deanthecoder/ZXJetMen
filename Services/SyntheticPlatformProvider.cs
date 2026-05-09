@@ -33,14 +33,16 @@ public sealed class SyntheticPlatformProvider : IPlatformProvider
         var scale = screenScale > 0 ? screenScale : 1;
         var width = screenBounds.Width / scale;
         var height = screenBounds.Height / scale;
-        var platformHeight = Math.Max(96, height * 0.2);
+        var platformHeight = Math.Max(80, height * 0.16);
 
         return
         [
-            CreatePlatform(width * 0.06, width * 0.38, height * 0.30, platformHeight, 0),
-            CreatePlatform(width * 0.56, width * 0.94, height * 0.42, platformHeight, 1),
-            CreatePlatform(width * 0.18, width * 0.72, height * 0.66, platformHeight, 2),
-            CreatePlatform(width * 0.02, width * 0.98, height * 0.92, Math.Max(64, height * 0.08), 3)
+            CreatePlatform(width * 0.06, width * 0.50, height * 0.24, platformHeight, 0),
+            CreatePlatform(width * 0.52, width * 0.94, height * 0.34, platformHeight, 1),
+            CreatePlatform(width * 0.24, width * 0.72, height * 0.46, platformHeight, 2),
+            CreatePlatform(width * 0.10, width * 0.44, height * 0.66, platformHeight, 3),
+            CreatePlatform(width * 0.42, width * 0.88, height * 0.74, platformHeight, 4),
+            CreatePlatform(width * 0.02, width * 0.98, height * 0.92, Math.Max(64, height * 0.08), 5)
         ];
     }
 
