@@ -50,7 +50,7 @@ public sealed class PlayfieldView : Control
     private const double FlyDurationSeconds = 1.0;
     private const double EdgeFlyDurationSeconds = 0.5;
     private const double FlyThrust = 200;
-    private const double MaxUpwardSpeed = -100;
+    private const double MaxVerticalSpeed = 100;
     private const double SimulationFramesPerSecond = 15;
     private const double HorizontalAcceleration = 320;
     private const double GroundFriction = 7;
@@ -500,11 +500,11 @@ public sealed class PlayfieldView : Control
             {
                 // Short bursts of upward thrust for the JetPac-style spaceman.
                 jetman.FlyTimeRemaining = Math.Max(0, jetman.FlyTimeRemaining - dt);
-                jetman.Vy = Math.Max(MaxUpwardSpeed, jetman.Vy - FlyThrust * dt);
+                jetman.Vy = Math.Max(-MaxVerticalSpeed, jetman.Vy - FlyThrust * dt);
             }
 
             jetman.FlyAnimationTime += dt;
-            jetman.Vy += Gravity * dt;
+            jetman.Vy = Math.Min(MaxVerticalSpeed, jetman.Vy + Gravity * dt);
             jetman.Y += jetman.Vy * dt;
 
             var landed = jetman.Retiring
@@ -703,7 +703,7 @@ public sealed class PlayfieldView : Control
         else
         {
             treasure.Grounded = false;
-            treasure.Vy += Gravity * dt;
+            treasure.Vy = Math.Min(MaxVerticalSpeed, treasure.Vy + Gravity * dt);
             treasure.Y += treasure.Vy * dt;
 
             var landed = FindTreasureLandingPlatform(treasure, platforms, previousBottom, treasure.Y + TreasureHeight);
