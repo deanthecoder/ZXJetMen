@@ -110,7 +110,9 @@ public sealed class OverlayWindow : Window
             return;
         }
 
-        m_activeScreenBounds = primary.Bounds;
+        m_activeScreenBounds = OperatingSystem.IsMacOS()
+            ? primary.WorkingArea
+            : primary.Bounds;
         m_activeScreenScale = primary.Scaling > 0 ? primary.Scaling : 1;
         var logicalWidth = m_activeScreenBounds.Width / m_activeScreenScale;
         var logicalHeight = m_activeScreenBounds.Height / m_activeScreenScale;

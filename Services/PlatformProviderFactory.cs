@@ -20,8 +20,16 @@ public static class PlatformProviderFactory
 {
     public static IPlatformProvider Create()
     {
-        return OperatingSystem.IsWindows()
-            ? new WindowsPlatformProvider()
-            : new SyntheticPlatformProvider();
+        if (OperatingSystem.IsWindows())
+        {
+            return new WindowsPlatformProvider();
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return new MacPlatformProvider();
+        }
+
+        return new SyntheticPlatformProvider();
     }
 }
