@@ -69,6 +69,9 @@ public sealed class PlayfieldView : Control
     private const double DirectionChangeCooldownSeconds = 1;
     private const double MinSpawnDelaySeconds = 1;
     private const double MaxSpawnDelaySeconds = 2;
+    private const double MinTreasureBounceSpeed = 24;
+    private const double MaxTreasureBounceSpeed = 48;
+    private const double TreasureBounceDamping = 0.35;
     private readonly Random m_random = new();
     private readonly List<Jetman> m_jetmen = new();
     private readonly List<Treasure> m_treasures = new();
@@ -692,16 +695,25 @@ public sealed class PlayfieldView : Control
         ClearMissingTreasureLanding(treasure, platforms);
 
         var previousBottom = treasure.Y + TreasureHeight;
+        var wasGrounded = treasure.Grounded;
         var support = FindTreasureSupport(treasure, platforms);
         if (support is not null && treasure.Vy >= 0)
         {
             treasure.Y = support.Value.Y - TreasureHeight;
-            treasure.Vy = 0;
-            treasure.Grounded = true;
             treasure.TargetLandingY = null;
+            if (!TryBounceTreasure(treasure))
+            {
+                treasure.Vy = 0;
+                treasure.Grounded = true;
+            }
         }
         else
         {
+            if (wasGrounded)
+            {
+                treasure.CanBounceOnLanding = true;
+            }
+
             treasure.Grounded = false;
             treasure.Vy = Math.Min(MaxVerticalSpeed, treasure.Vy + Gravity * dt);
             treasure.Y += treasure.Vy * dt;
@@ -710,9 +722,12 @@ public sealed class PlayfieldView : Control
             if (treasure.Vy >= 0 && landed is not null)
             {
                 treasure.Y = landed.Value.Y - TreasureHeight;
-                treasure.Vy = 0;
-                treasure.Grounded = true;
                 treasure.TargetLandingY = null;
+                if (!TryBounceTreasure(treasure))
+                {
+                    treasure.Vy = 0;
+                    treasure.Grounded = true;
+                }
             }
         }
 
@@ -739,6 +754,20 @@ public sealed class PlayfieldView : Control
         {
             treasure.TargetLandingY = null;
         }
+    }
+
+    private static bool TryBounceTreasure(Treasure treasure)
+    {
+        if (!treasure.CanBounceOnLanding)
+        {
+            return false;
+        }
+
+        var bounceSpeed = Math.Clamp(treasure.Vy * TreasureBounceDamping, MinTreasureBounceSpeed, MaxTreasureBounceSpeed);
+        treasure.Vy = -bounceSpeed;
+        treasure.Grounded = false;
+        treasure.CanBounceOnLanding = false;
+        return true;
     }
 
     private Platform? FindTreasureSupport(Treasure treasure, IReadOnlyList<Platform> platforms)
@@ -810,6 +839,7 @@ public sealed class PlayfieldView : Control
         treasure.Vy = 0;
         treasure.Active = true;
         treasure.Grounded = false;
+        treasure.CanBounceOnLanding = true;
         treasure.TargetLandingY = candidate.Platform.Y;
     }
 
@@ -828,6 +858,7 @@ public sealed class PlayfieldView : Control
         treasure.Grounded = false;
         treasure.Vy = 0;
         treasure.Y = -TreasureHeight;
+        treasure.CanBounceOnLanding = true;
         treasure.TargetLandingY = null;
         treasure.SpawnAt = now + RandomSpawnDelay();
     }
@@ -1475,6 +1506,7 @@ public sealed class PlayfieldView : Control
         public bool Active { get; set; }
         public double SpawnAt { get; set; }
         public bool Grounded { get; set; }
+        public bool CanBounceOnLanding { get; set; }
         public double? TargetLandingY { get; set; }
     }
 }
