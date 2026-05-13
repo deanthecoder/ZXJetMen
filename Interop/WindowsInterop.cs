@@ -198,7 +198,7 @@ internal static partial class WindowsInterop
         var style = GetWindowLong(handle, GWL_EXSTYLE);
         _ = SetWindowLong(handle, GWL_EXSTYLE, style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
         DisableShadow(handle);
-        _ = SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        _ = SetWindowPos(handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 
     private static void DisableShadow(IntPtr handle)
@@ -225,8 +225,9 @@ internal static partial class WindowsInterop
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int SWP_NOMOVE = 0x0002;
     private const int SWP_NOSIZE = 0x0001;
-    private const int SWP_NOZORDER = 0x0004;
+    private const int SWP_NOACTIVATE = 0x0010;
     private const int SWP_FRAMECHANGED = 0x0020;
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
     private const int DwmwaNcrenderingPolicy = 2;
     private const int DwmwaCloaked = 14;
     private const int DwmNcrpDisabled = 1;
