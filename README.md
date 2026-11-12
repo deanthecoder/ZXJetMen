@@ -15,6 +15,8 @@ It drops tiny jetmen onto your desktop, lets treasures tumble in from above, and
 
 - Jetpac-inspired spacemen and treasure sprites.
 - Little jetmen walking, flying, and collecting whatever treasure they bump into.
+- Occasional visits from Jet Set Willy: original Spectrum sprites and stepped movement, treasure hurdles, and a final leap off a window.
+- Cyan Horace carries his skis along a window, then slaloms down beside it when there is room, using original Horace Goes Skiing frames.
 - A smoke puff when they blast off from a platform.
 - A tray/menu-bar icon with controls for adding or removing jetmen.
 - A mini mode for native-size sprites, and the regular chunky 2x mode.
@@ -64,6 +66,14 @@ dotnet run --project ZxJetMen.csproj
 ## Notes
 
 ZXJetMen is a fan-made desktop toy and is not affiliated with the original Jetpac or its creators.
+
+Horace and Willy take turns visiting, starting with Horace after 30–60 seconds
+and leaving the same gap between visits when a suitable exposed window top is available.
+Willy wanders for 15–30 seconds before heading off the edge. Horace carries his
+skis for 8–14 seconds before looking for a clear side to ski down; when there
+isn't room, he keeps carrying them and eventually leaves. Both respect mini mode.
+Original sprite credits and references are in [Assets/willy-source.md](Assets/willy-source.md)
+and [Assets/horace-source.md](Assets/horace-source.md).
 
 ## License
 

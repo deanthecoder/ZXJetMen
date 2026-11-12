@@ -24,7 +24,7 @@ namespace ZXJetMen.Views;
 /// <remarks>
 /// This control owns the small game simulation: jetman movement, treasure spawning, sprite animation, and platform collisions.
 /// </remarks>
-public sealed class PlayfieldView : Control
+public sealed partial class PlayfieldView : Control
 {
     private const int SpriteSheetColumns = 4;
     private const int SpriteSheetRows = 3;
@@ -123,6 +123,7 @@ public sealed class PlayfieldView : Control
         m_treasuresInitialized = false;
         m_jetmanSpawningStarted = false;
         m_nextJetmanSpawnAt = 0;
+        ResetVisitors();
         InvalidateVisual();
     }
 
@@ -156,6 +157,11 @@ public sealed class PlayfieldView : Control
             StepJetman(jetman, dt, now, platforms, isEvacuating);
         }
 
+        if (isEvacuating)
+            ResetVisitors();
+        else
+            StepVisitors(dt, now, platforms);
+
         InvalidateVisual();
     }
 
@@ -178,6 +184,8 @@ public sealed class PlayfieldView : Control
         var oldJetmanHeight = JetmanHeight;
         var oldTreasureWidth = TreasureWidth;
         var oldTreasureHeight = TreasureHeight;
+        m_willy?.Rescale(m_spriteScale / newScale);
+        m_horace?.Rescale(m_spriteScale / newScale);
         m_spriteScale = newScale;
 
         foreach (var jetman in m_jetmen)
@@ -223,6 +231,8 @@ public sealed class PlayfieldView : Control
             DrawSmoke(context, jetman);
             DrawJetman(context, jetman);
         }
+
+        DrawVisitors(context);
     }
 
     private void DrawSyntheticPlatforms(DrawingContext context)
